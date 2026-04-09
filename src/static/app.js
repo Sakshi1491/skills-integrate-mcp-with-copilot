@@ -3,25 +3,55 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const registerForm = document.getElementById("register-form");
+  const loginForm = document.getElementById("login-form");
+  const authStatus = document.getElementById("auth-status");
+  const qnaContainer = document.getElementById("qna-container");
+  const qnaForm = document.getElementById("qna-form");
+  const qnaMessage = document.getElementById("qna-message");
+  const questionsList = document.getElementById("questions");
+  const currentUserText = document.getElementById("current-user");
 
-  // Function to fetch activities from API
+  let currentUser = localStorage.getItem("mergington_user") || "";
+
+  function setCurrentUser(email) {
+    currentUser = email;
+    if (email) {
+      localStorage.setItem("mergington_user", email);
+      qnaContainer.classList.remove("hidden");
+      currentUserText.textContent = `Logged in as ${email}`;
+      currentUserText.className = "info";
+      fetchQuestions();
+    } else {
+      localStorage.removeItem("mergington_user");
+      qnaContainer.classList.add("hidden");
+      currentUserText.textContent = "";
+    }
+  }
+
+  async function showMessage(element, text, type = "info") {
+    element.textContent = text;
+    element.className = `message ${type}`;
+    element.classList.remove("hidden");
+    setTimeout(() => {
+      element.classList.add("hidden");
+    }, 5000);
+  }
+
   async function fetchActivities() {
     try {
       const response = await fetch("/activities");
       const activities = await response.json();
 
-      // Clear loading message
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = "<option value=''>-- Select an activity --</option>";
 
-      // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
         activityCard.className = "activity-card";
 
-        const spotsLeft =
-          details.max_participants - details.participants.length;
+        const spotsLeft = details.max_participants - details.participants.length;
 
-        // Create participants HTML with delete icons instead of bullet points
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
@@ -49,14 +79,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         activitiesList.appendChild(activityCard);
 
-        // Add option to select dropdown
         const option = document.createElement("option");
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
       });
 
-      // Add event listeners to delete buttons
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
@@ -67,7 +95,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Handle unregister functionality
   async function handleUnregister(event) {
     const button = event.target;
     const activity = button.getAttribute("data-activity");
@@ -75,42 +102,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const response = await fetch(
-        `/activities/${encodeURIComponent(
-          activity
-        )}/unregister?email=${encodeURIComponent(email)}`,
-        {
-          method: "DELETE",
-        }
+        `/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(
+          email
+        )}`,
+        { method: "DELETE" }
       );
 
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
-
-        // Refresh activities list to show updated participants
+        showMessage(messageDiv, result.message, "success");
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        showMessage(messageDiv, result.detail || "An error occurred", "error");
       }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to unregister. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showMessage(messageDiv, "Failed to unregister. Please try again.", "error");
       console.error("Error unregistering:", error);
     }
   }
 
-  // Handle form submission
   signupForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
@@ -119,42 +130,128 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const response = await fetch(
-        `/activities/${encodeURIComponent(
-          activity
-        )}/signup?email=${encodeURIComponent(email)}`,
-        {
-          method: "POST",
-        }
+        `/activities/${encodeURIComponent(activity)}/signup?email=${encodeURIComponent(
+          email
+        )}`,
+        { method: "POST" }
       );
 
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        showMessage(messageDiv, result.message, "success");
         signupForm.reset();
-
-        // Refresh activities list to show updated participants
         fetchActivities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        showMessage(messageDiv, result.detail || "An error occurred", "error");
       }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to sign up. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showMessage(messageDiv, "Failed to sign up. Please try again.", "error");
       console.error("Error signing up:", error);
     }
   });
 
-  // Initialize app
+  registerForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const email = document.getElementById("register-email").value;
+    const password = document.getElementById("register-password").value;
+
+    try {
+      const response = await fetch("/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        showMessage(authStatus, result.message, "success");
+        setCurrentUser(email);
+        registerForm.reset();
+      } else {
+        showMessage(authStatus, result.detail || "Registration failed", "error");
+      }
+    } catch (error) {
+      showMessage(authStatus, "Registration error. Please try again.", "error");
+      console.error("Error registering:", error);
+    }
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const email = document.getElementById("login-email").value;
+    const password = document.getElementById("login-password").value;
+
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        showMessage(authStatus, result.message, "success");
+        setCurrentUser(email);
+        loginForm.reset();
+      } else {
+        showMessage(authStatus, result.detail || "Login failed", "error");
+      }
+    } catch (error) {
+      showMessage(authStatus, "Login error. Please try again.", "error");
+      console.error("Error logging in:", error);
+    }
+  });
+
+  async function fetchQuestions() {
+    try {
+      const response = await fetch("/qna");
+      const questions = await response.json();
+
+      questionsList.innerHTML = "";
+      questions.forEach((item) => {
+        const listItem = document.createElement("li");
+        listItem.innerHTML = `<strong>${item.email}</strong>: ${item.question}`;
+        questionsList.appendChild(listItem);
+      });
+    } catch (error) {
+      console.error("Error fetching questions:", error);
+    }
+  }
+
+  qnaForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!currentUser) {
+      showMessage(qnaMessage, "Please log in first to ask a question.", "error");
+      return;
+    }
+
+    const question = document.getElementById("question").value;
+
+    try {
+      const response = await fetch("/qna", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: currentUser, question }),
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        showMessage(qnaMessage, result.message, "success");
+        qnaForm.reset();
+        fetchQuestions();
+      } else {
+        showMessage(qnaMessage, result.detail || "Could not submit question", "error");
+      }
+    } catch (error) {
+      showMessage(qnaMessage, "Question submission failed. Please try again.", "error");
+      console.error("Error submitting question:", error);
+    }
+  });
+
+  setCurrentUser(currentUser);
   fetchActivities();
 });

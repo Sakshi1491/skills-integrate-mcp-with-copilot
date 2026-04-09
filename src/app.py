@@ -5,11 +5,16 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+import json
 import os
+from datetime import datetime
 from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from passlib.context import CryptContext
+from pydantic import BaseModel, EmailStr
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -18,6 +23,12 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+# Paths for persistent storage
+USERS_FILE = current_dir / "users.json"
+QNA_FILE = current_dir / "qna.json"
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # In-memory activity database
 activities = {
@@ -78,6 +89,53 @@ activities = {
 }
 
 
+def load_json_file(path: Path, default):
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as file:
+                return json.load(file)
+        except json.JSONDecodeError:
+            return default
+    return default
+
+
+def save_json_file(path: Path, data):
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, indent=2)
+
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def find_user(email: str):
+    return next((user for user in users if user["email"] == email.lower()), None)
+
+
+class UserCredentials(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class QnaSubmission(BaseModel):
+    email: EmailStr
+    question: str
+
+
+class QnaItem(BaseModel):
+    email: EmailStr
+    question: str
+    created_at: str
+
+
+users = load_json_file(USERS_FILE, [])
+qna_items = load_json_file(QNA_FILE, [])
+
+
 @app.get("/")
 def root():
     return RedirectResponse(url="/static/index.html")
@@ -91,21 +149,17 @@ def get_activities():
 @app.post("/activities/{activity_name}/signup")
 def signup_for_activity(activity_name: str, email: str):
     """Sign up a student for an activity"""
-    # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    # Get the specific activity
     activity = activities[activity_name]
 
-    # Validate student is not already signed up
     if email in activity["participants"]:
         raise HTTPException(
             status_code=400,
             detail="Student is already signed up"
         )
 
-    # Add student
     activity["participants"].append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
 
@@ -113,20 +167,52 @@ def signup_for_activity(activity_name: str, email: str):
 @app.delete("/activities/{activity_name}/unregister")
 def unregister_from_activity(activity_name: str, email: str):
     """Unregister a student from an activity"""
-    # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    # Get the specific activity
     activity = activities[activity_name]
 
-    # Validate student is signed up
     if email not in activity["participants"]:
         raise HTTPException(
             status_code=400,
             detail="Student is not signed up for this activity"
         )
 
-    # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+@app.post("/auth/register")
+def register_user(user: UserCredentials):
+    if find_user(user.email):
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    hashed_password = get_password_hash(user.password)
+    users.append({"email": user.email.lower(), "password": hashed_password})
+    save_json_file(USERS_FILE, users)
+    return {"message": "User registered successfully"}
+
+
+@app.post("/auth/login")
+def login_user(user: UserCredentials):
+    existing_user = find_user(user.email)
+    if not existing_user or not verify_password(user.password, existing_user["password"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return {"message": "Login successful"}
+
+
+@app.get("/qna")
+def get_qna():
+    return qna_items
+
+
+@app.post("/qna")
+def submit_question(item: QnaSubmission):
+    qna_entry = QnaItem(
+        email=item.email.lower(),
+        question=item.question,
+        created_at=datetime.utcnow().isoformat() + "Z"
+    ).dict()
+    qna_items.append(qna_entry)
+    save_json_file(QNA_FILE, qna_items)
+    return {"message": "Question submitted successfully"}

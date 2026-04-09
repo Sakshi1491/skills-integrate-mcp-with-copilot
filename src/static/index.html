@@ -39,6 +39,53 @@
         </form>
         <div id="message" class="hidden"></div>
       </section>
+
+      <section id="auth-container">
+        <h3>Account access</h3>
+        <div id="auth-forms">
+          <form id="register-form">
+            <div class="form-group">
+              <label for="register-email">Register Email:</label>
+              <input type="email" id="register-email" required placeholder="new-student@mergington.edu" />
+            </div>
+            <div class="form-group">
+              <label for="register-password">Password:</label>
+              <input type="password" id="register-password" required placeholder="Choose a password" />
+            </div>
+            <button type="submit">Register</button>
+          </form>
+
+          <form id="login-form">
+            <div class="form-group">
+              <label for="login-email">Login Email:</label>
+              <input type="email" id="login-email" required placeholder="your-email@mergington.edu" />
+            </div>
+            <div class="form-group">
+              <label for="login-password">Password:</label>
+              <input type="password" id="login-password" required placeholder="Enter your password" />
+            </div>
+            <button type="submit">Login</button>
+          </form>
+        </div>
+        <div id="auth-status" class="hidden message"></div>
+      </section>
+
+      <section id="qna-container" class="hidden">
+        <h3>Ask a question</h3>
+        <p id="current-user"></p>
+        <form id="qna-form">
+          <div class="form-group">
+            <label for="question">Question:</label>
+            <input type="text" id="question" required placeholder="Ask a question about activities or signup" />
+          </div>
+          <button type="submit">Submit Question</button>
+        </form>
+        <div id="qna-message" class="hidden message"></div>
+        <div id="questions-list">
+          <h4>Questions</h4>
+          <ul id="questions"></ul>
+        </div>
+      </section>
     </main>
 
     <footer>
